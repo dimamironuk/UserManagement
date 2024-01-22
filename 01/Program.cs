@@ -2,6 +2,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Text.RegularExpressions;
+using System.Threading;
 
 class Program
 {
@@ -37,11 +38,17 @@ class Program
     {
         public List<User> Users { get; set; }
         public BinaryFormatter formatter { get; set; }
+        private Timer autosaveTimer;
+        //автосейв не буде виконуватись тоді коли я ввожу дані
+        private bool isInputInProgress;
+        private object inputLock = new object();
         public UserManagement()
         {
             Users = new List<User>();
             formatter = new BinaryFormatter();
             Load();
+            isInputInProgress = false;
+            autosaveTimer = new Timer(AutosaveCallback, null, TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(10));
         }
         public void Update(int index, User NewUser)
         {
@@ -66,7 +73,7 @@ class Program
         {
             for (int i = 0; i < Users.Count; i++)
             {
-                Console.WriteLine($"#{i}\n"+Users[i].ToString());
+                Console.WriteLine($"#{i}\n" + Users[i].ToString());
             }
         }
         public void ShowUser(string p)
@@ -98,6 +105,8 @@ class Program
                 formatter.Serialize(fstream, Users);
             }
         }
+
+
         public void Menu()
         {
             while (true)
@@ -106,137 +115,18 @@ class Program
                 Console.Clear();
                 Console.WriteLine("User Management\n1 - Add User\n2 - RemoveUser\n3 - Show users\n4 - Show user(Email)\n5 - Show user(Name)\n6 - Update user\n0 - Exit\nChoice :: ");
                 int choice = int.Parse(Console.ReadLine());
-                switch (choice)
+                lock (inputLock)
                 {
-                    case 0:
-                        {
-                            Console.WriteLine("Good day! ;)");
-                            Thread.Sleep(1000);
-                            Save();
-                            return;
-                        }
-                    case 1:
-                        {
-                            User NewUser = new User();
-                            string tmp;
-                            //Name
-                            Console.WriteLine("Enter name :: ");
-                            tmp = Console.ReadLine();
-                            if (!Regex.IsMatch(tmp, @"^[A-Za-z]{3,20$}")) NewUser.Name = tmp;
-                            else
+                    switch (choice)
+                    {
+                        case 0:
                             {
-                                Console.WriteLine("ERROR");
+                                Console.WriteLine("Good day! ;)");
                                 Thread.Sleep(1000);
-                                break;
-                            }
-                            //Surname
-                            Console.WriteLine("Enter Surname :: ");
-                            tmp = Console.ReadLine();
-                            if (!Regex.IsMatch(tmp, @"^[a-zA-Z]{3,20$}")) NewUser.Surname = tmp;
-                            else
-                            {
-                                Console.WriteLine("ERROR");
-                                Thread.Sleep(1000);
-                                break;
-                            }
-                            //Age
-                            Console.WriteLine("Enter Age :: ");
-                            tmp = Console.ReadLine();
-                            if (int.Parse(tmp) >= 18) NewUser.Age = int.Parse(tmp);
-                            else
-                            {
-                                Console.WriteLine("ERROR");
-                                Thread.Sleep(1000);
-                                break;
-                            }
-                            //Phone
-                            Console.WriteLine("Enter Phone :: ");
-                            tmp = Console.ReadLine();
-                            if (Regex.IsMatch(tmp, @"^\+\d{10}")) NewUser.Phone = tmp;
-                            else
-                            {
-                                Console.WriteLine("ERROR");
-                                Thread.Sleep(1000);
-                                break;
-                            }
-                            //Email
-                            Console.WriteLine("Enter Email :: ");
-                            tmp = Console.ReadLine();
-                            if (Regex.IsMatch(tmp, @"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")) {
-                                foreach (var u in Users)
-                                {
-                                    if (u.Email == tmp)
-                                    {
-                                        Console.WriteLine("ERROR");
-                                        Thread.Sleep(1000);
-                                        NewUser = null;
-                                        break;
-                                    }                           
-                                }
-                            }
-                            else
-                            {
-                                Console.WriteLine("ERROR");
-                                Thread.Sleep(1000);
-                                break;
-                            }
-                            if (NewUser != null)
-                            {
-                                NewUser.Email = tmp;
-                                Users.Add(NewUser);
-                                Console.WriteLine("User Added!!! :)");
-                            }
-                            Thread.Sleep(1000);
-                            break;
-                        }
-                    case 2:
-                        {
-                            if (Users.Count == 0)
-                            {
-                                Console.WriteLine("Empty");
-                                Thread.Sleep(1000);
+                                Save();
                                 return;
                             }
-                            Console.WriteLine($"Enter index(0-{Users.Count-1}) :: ");
-                            int index = int.Parse(Console.ReadLine());
-                            RemoveUser(index);
-                            Console.WriteLine("Remove");
-                            Thread.Sleep(1000);
-                            break;
-                        }
-                    case 3:
-                        {
-                            AllShow();
-                            Console.ReadKey();
-                            break;
-                        }
-                    case 4:
-                        {
-                            Console.WriteLine("Enter Email :: ");
-                            string email = Console.ReadLine();
-                            ShowUser(email);
-                            Console.ReadKey();
-                            break;
-                        }
-                    case 5:
-                        {
-                            Console.WriteLine("Enter Name :: ");
-                            string name = Console.ReadLine();
-                            ShowUser(name);
-                            Console.ReadKey();
-                            break;
-                        }
-                    case 6:
-                        {
-                            if (Users.Count == 0)
-                            {
-                                Console.WriteLine("Empty");
-                                Thread.Sleep(1000);
-                                return;
-                            }
-                            Console.WriteLine($"Enter index(0-{Users.Count-1}) :: ");
-                            int index = int.Parse(Console.ReadLine());
-                            if (index < Users.Count && index >= 0)
+                        case 1:
                             {
                                 User NewUser = new User();
                                 string tmp;
@@ -304,17 +194,159 @@ class Program
                                 }
                                 if (NewUser != null)
                                 {
-                                    NewUser.Email = tmp; 
-                                    Update(index, NewUser);
+                                    NewUser.Email = tmp;
+                                    Users.Add(NewUser);
+                                    Console.WriteLine("User Added!!! :)");
                                 }
+                                Thread.Sleep(1000);
+                                break;
                             }
+                        case 2:
+                            {
+                                if (Users.Count == 0)
+                                {
+                                    Console.WriteLine("Empty");
+                                    Thread.Sleep(1000);
+                                    return;
+                                }
+                                Console.WriteLine($"Enter index(0-{Users.Count - 1}) :: ");
+                                int index = int.Parse(Console.ReadLine());
+                                RemoveUser(index);
+                                Console.WriteLine("Remove");
+                                Thread.Sleep(1000);
+                                break;
+                            }
+                        case 3:
+                            {
+                                AllShow();
+                                Console.ReadKey();
+                                break;
+                            }
+                        case 4:
+                            {
+                                Console.WriteLine("Enter Email :: ");
+                                string email = Console.ReadLine();
+                                ShowUser(email);
+                                Console.ReadKey();
+                                break;
+                            }
+                        case 5:
+                            {
+                                Console.WriteLine("Enter Name :: ");
+                                string name = Console.ReadLine();
+                                ShowUser(name);
+                                Console.ReadKey();
+                                break;
+                            }
+                        case 6:
+                            {
+                                if (Users.Count == 0)
+                                {
+                                    Console.WriteLine("Empty");
+                                    Thread.Sleep(1000);
+                                    return;
+                                }
+                                Console.WriteLine($"Enter index(0-{Users.Count - 1}) :: ");
+                                int index = int.Parse(Console.ReadLine());
+                                if (index < Users.Count && index >= 0)
+                                {
+                                    User NewUser = new User();
+                                    string tmp;
+                                    //Name
+                                    Console.WriteLine("Enter name :: ");
+                                    tmp = Console.ReadLine();
+                                    if (!Regex.IsMatch(tmp, @"^[A-Za-z]{3,20$}")) NewUser.Name = tmp;
+                                    else
+                                    {
+                                        Console.WriteLine("ERROR");
+                                        Thread.Sleep(1000);
+                                        break;
+                                    }
+                                    //Surname
+                                    Console.WriteLine("Enter Surname :: ");
+                                    tmp = Console.ReadLine();
+                                    if (!Regex.IsMatch(tmp, @"^[a-zA-Z]{3,20$}")) NewUser.Surname = tmp;
+                                    else
+                                    {
+                                        Console.WriteLine("ERROR");
+                                        Thread.Sleep(1000);
+                                        break;
+                                    }
+                                    //Age
+                                    Console.WriteLine("Enter Age :: ");
+                                    tmp = Console.ReadLine();
+                                    if (int.Parse(tmp) >= 18) NewUser.Age = int.Parse(tmp);
+                                    else
+                                    {
+                                        Console.WriteLine("ERROR");
+                                        Thread.Sleep(1000);
+                                        break;
+                                    }
+                                    //Phone
+                                    Console.WriteLine("Enter Phone :: ");
+                                    tmp = Console.ReadLine();
+                                    if (Regex.IsMatch(tmp, @"^\+\d{10}")) NewUser.Phone = tmp;
+                                    else
+                                    {
+                                        Console.WriteLine("ERROR");
+                                        Thread.Sleep(1000);
+                                        break;
+                                    }
+                                    //Email
+                                    Console.WriteLine("Enter Email :: ");
+                                    tmp = Console.ReadLine();
+                                    if (Regex.IsMatch(tmp, @"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"))
+                                    {
+                                        foreach (var u in Users)
+                                        {
+                                            if (u.Email == tmp)
+                                            {
+                                                Console.WriteLine("ERROR");
+                                                Thread.Sleep(1000);
+                                                NewUser = null;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    else
+                                    {
+                                        Console.WriteLine("ERROR");
+                                        Thread.Sleep(1000);
+                                        break;
+                                    }
+                                    if (NewUser != null)
+                                    {
+                                        NewUser.Email = tmp;
+                                        Update(index, NewUser);
+                                    }
+                                }
 
-                            break;
-                        }
+                                break;
+                            }
+                    }
                 }
             }
         }
+        private void AutosaveCallback(object state)
+        {
+            lock (inputLock)
+            {
+                if (!isInputInProgress)
+                {
+                    Console.WriteLine("autosave!!!");
+                    Save();
+
+                }
+                else
+                {
+                    Console.WriteLine("");
+                }
+            }
+           
+            
+        }
     }
+
     static void Main()
     {
         UserManagement userManagement = new UserManagement();
